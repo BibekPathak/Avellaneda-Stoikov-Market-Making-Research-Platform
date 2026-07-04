@@ -1,0 +1,9 @@
+build/
+*.o
+*.a
+*.so
+*.swp
+__pycache__/
+*.pyc
+.python-version
+.cache/
