@@ -15,3 +15,7 @@ gtest_discover_tests(test_fill_model)
 add_executable(test_avellaneda_stoikov test_avellaneda_stoikov.cpp)
 target_link_libraries(test_avellaneda_stoikov PRIVATE mm_core hft_core gtest_main)
 gtest_discover_tests(test_avellaneda_stoikov)
+
+add_executable(test_quote_engine test_quote_engine.cpp)
+target_link_libraries(test_quote_engine PRIVATE mm_core hft_core gtest_main)
+gtest_discover_tests(test_quote_engine)
