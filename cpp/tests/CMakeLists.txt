@@ -19,3 +19,7 @@ gtest_discover_tests(test_avellaneda_stoikov)
 add_executable(test_quote_engine test_quote_engine.cpp)
 target_link_libraries(test_quote_engine PRIVATE mm_core hft_core gtest_main)
 gtest_discover_tests(test_quote_engine)
+
+add_executable(test_latency_model test_latency_model.cpp)
+target_link_libraries(test_latency_model PRIVATE mm_core hft_core gtest_main)
+gtest_discover_tests(test_latency_model)
