@@ -35,3 +35,7 @@ gtest_discover_tests(test_strategy)
 add_executable(test_simulator test_simulator.cpp)
 target_link_libraries(test_simulator PRIVATE mm_core hft_core gtest_main)
 gtest_discover_tests(test_simulator)
+
+add_executable(test_analytics test_analytics.cpp)
+target_link_libraries(test_analytics PRIVATE mm_core hft_core gtest_main)
+gtest_discover_tests(test_analytics)
