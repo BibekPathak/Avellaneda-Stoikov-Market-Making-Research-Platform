@@ -8,6 +8,7 @@
 #include "mm/quote_engine.hpp"
 #include "mm/latency_model.hpp"
 #include "mm/risk.hpp"
+#include "mm/kappa_calibrator.hpp"
 #include <memory>
 #include <limits>
 
@@ -70,13 +71,19 @@ public:
         int64_t spread = tick.spread();
         if (mid <= 0 || spread <= 0) return orders;
 
+        last_mid_price_ = mid;
+        last_spread_ = spread;
+
         update_tick_rate(tick.timestamp);
         update_book_stats(tick);
 
         volatility_.add_price(mid);
 
         double sigma = volatility_.volatility();
-        double kappa = fill_intensity(mid, spread, tick);
+
+        double avg_dist = 0.25;
+        double kappa = kappa_calibrator_.kappa(avg_dist);
+        if (kappa <= 0.0) kappa = 10.0;
 
         double inv_norm = static_cast<double>(inventory_.position)
                         / static_cast<double>(max_position_);
@@ -99,6 +106,13 @@ public:
         if (!risk_check.approved) {
             return orders;
         }
+
+        double bid_dist = std::max(0.0,
+            static_cast<double>(mid - spread / 2 - q.bid_price) / static_cast<double>(spread));
+        double ask_dist = std::max(0.0,
+            static_cast<double>(q.ask_price - (mid + spread / 2)) / static_cast<double>(spread));
+        kappa_calibrator_.record_quote(bid_dist, false);
+        kappa_calibrator_.record_quote(ask_dist, false);
 
         uint64_t latency_us = latency_->delay_us();
         uint64_t delayed_ts = tick.timestamp + latency_us;
@@ -130,6 +144,22 @@ public:
             (trade.price > 0) ? trade.price : 10000
         );
         risk_.record_pnl(inventory_.realized_pnl, inventory_.unrealized_pnl);
+
+        if (last_spread_ > 0 && last_mid_price_ > 0) {
+            double fill_dist;
+            if (trade.side == hft::Side::Buy && last_bid_price_ > 0) {
+                fill_dist = std::max(0.0,
+                    static_cast<double>(last_mid_price_ - last_spread_ / 2 - last_bid_price_)
+                    / static_cast<double>(last_spread_));
+            } else if (trade.side == hft::Side::Sell && last_ask_price_ > 0) {
+                fill_dist = std::max(0.0,
+                    static_cast<double>(last_ask_price_ - (last_mid_price_ + last_spread_ / 2))
+                    / static_cast<double>(last_spread_));
+            } else {
+                fill_dist = 0.0;
+            }
+            kappa_calibrator_.record_quote(fill_dist, true);
+        }
     }
 
     void reset() override {
@@ -147,6 +177,9 @@ public:
         pending_ask_order_id_ = 0;
         last_bid_price_ = 0;
         last_ask_price_ = 0;
+        last_mid_price_ = 0;
+        last_spread_ = 0;
+        kappa_calibrator_.reset();
     }
 
     const Inventory& inventory() const { return inventory_; }
@@ -166,6 +199,8 @@ public:
     int64_t last_bid_price() const { return last_bid_price_; }
     int64_t last_ask_price() const { return last_ask_price_; }
     double tick_rate() const { return tick_rate_per_sec_; }
+    KappaCalibrator& kappa_calibrator() { return kappa_calibrator_; }
+    const KappaCalibrator& kappa_calibrator() const { return kappa_calibrator_; }
 
 private:
     void update_tick_rate(uint64_t timestamp_us) {
@@ -194,13 +229,6 @@ private:
         }
     }
 
-    double fill_intensity(int64_t mid, int64_t spread, const hft::MarketTick& tick) const {
-        (void)mid;
-        (void)spread;
-        (void)tick;
-        return tick_rate_per_sec_ > 0.0 ? tick_rate_per_sec_ : 10.0;
-    }
-
     Inventory inventory_;
     AvellanedaStoikov as_model_;
     QuoteEngine quote_engine_;
@@ -221,10 +249,14 @@ private:
     uint64_t cum_ask_size_;
     uint64_t book_update_count_;
 
+    KappaCalibrator kappa_calibrator_;
+
     uint64_t pending_bid_order_id_ = 0;
     uint64_t pending_ask_order_id_ = 0;
     int64_t last_bid_price_ = 0;
     int64_t last_ask_price_ = 0;
+    int64_t last_mid_price_ = 0;
+    int64_t last_spread_ = 0;
 };
 
 } // namespace mm
