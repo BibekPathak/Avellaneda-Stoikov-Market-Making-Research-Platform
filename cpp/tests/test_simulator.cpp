@@ -165,3 +165,96 @@ TEST(SimulatorTest, HighRiskAversionFewerTrades) {
     // Higher risk aversion → wider spreads → fewer fills
     EXPECT_GE(result_low.total_trades(), result_high.total_trades());
 }
+
+// ── Fill Simulation Mode Produces Trades ─────────────────────────────────
+
+TEST(SimulatorTest, FillSimulationProducesTrades) {
+    auto feed = std::make_unique<hft::MarketDataFeed>();
+    feed->generate_synthetic(200, 50000, 100);
+
+    // High gamma produces narrower spread, making fills more likely
+    auto strategy = std::make_unique<ASMarketMaker>(1000.0, 1.0, 500, 1, 0);
+
+    Simulator sim(std::move(feed), std::move(strategy), true);
+    sim.set_snapshot_interval(1);
+    auto result = sim.run();
+
+    EXPECT_EQ(result.total_ticks(), 200);
+    EXPECT_GT(result.total_trades(), 0);
+    EXPECT_TRUE(sim.fill_simulation_mode());
+}
+
+// ── Fill Simulation Tracks Inventory ─────────────────────────────────────
+
+TEST(SimulatorTest, FillSimulationInventory) {
+    auto feed = std::make_unique<hft::MarketDataFeed>();
+    feed->generate_synthetic(100, 50000, 100);
+
+    auto strategy = std::make_unique<ASMarketMaker>(1000.0, 1.0, 200, 1, 0);
+
+    Simulator sim(std::move(feed), std::move(strategy), true);
+    sim.set_snapshot_interval(1);
+    auto result = sim.run();
+
+    bool inventory_changed = false;
+    for (size_t i = 1; i < result.snapshots.size(); i++) {
+        if (result.snapshots[i].inventory != result.snapshots[0].inventory) {
+            inventory_changed = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(inventory_changed);
+    EXPECT_NE(result.total_trades(), 0);
+}
+
+// ── Fill Simulation with QueuePosition Fill Model ────────────────────────
+
+TEST(SimulatorTest, FillSimulationQueueModel) {
+    auto feed = std::make_unique<hft::MarketDataFeed>();
+    feed->generate_synthetic(200, 50000, 100);
+
+    auto strategy = std::make_unique<ASMarketMaker>(1000.0, 1.0, 500, 1, 0);
+    strategy->set_fill_model(std::make_unique<QueuePositionFill>());
+
+    Simulator sim(std::move(feed), std::move(strategy), true);
+    sim.set_snapshot_interval(1);
+    auto result = sim.run();
+
+    EXPECT_EQ(result.total_ticks(), 200);
+    EXPECT_GT(result.total_trades(), 0);
+}
+
+// ── Fill Simulation Mode Toggle ──────────────────────────────────────────
+
+TEST(SimulatorTest, FillSimulationToggle) {
+    auto feed = std::make_unique<hft::MarketDataFeed>();
+    feed->generate_synthetic(50, 50000, 100);
+
+    auto strategy = std::make_unique<ASMarketMaker>(0.1, 1.0, 500, 1, 0);
+
+    Simulator sim(std::move(feed), std::move(strategy));
+    EXPECT_FALSE(sim.fill_simulation_mode());
+
+    sim.set_fill_simulation_mode(true);
+    EXPECT_TRUE(sim.fill_simulation_mode());
+}
+
+// ── Fill Simulation Reports Trades In Result ─────────────────────────────
+
+TEST(SimulatorTest, FillSimulationReportsTrades) {
+    auto feed = std::make_unique<hft::MarketDataFeed>();
+    feed->generate_synthetic(100, 50000, 100);
+
+    auto strategy = std::make_unique<ASMarketMaker>(0.05, 1.0, 500, 1, 0);
+
+    Simulator sim(std::move(feed), std::move(strategy), true);
+    sim.set_snapshot_interval(1);
+    auto result = sim.run();
+
+    EXPECT_EQ(result.trades.size(), result.snapshots.back().trade_count);
+    for (const auto& trade : result.trades) {
+        EXPECT_GT(trade.price, 0);
+        EXPECT_GT(trade.quantity, 0);
+    }
+}

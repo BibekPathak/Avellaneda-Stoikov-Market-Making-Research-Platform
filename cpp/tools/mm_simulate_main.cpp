@@ -21,6 +21,7 @@ struct Config {
     uint64_t snapshot_interval = 1;
     int fixed_spread = 0;
     int fill_model = 0;
+    bool fill_simulation = false;
     bool show_help = false;
 };
 
@@ -46,6 +47,7 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--snapshot-interval") cfg.snapshot_interval = std::stoull(next());
         else if (arg == "--fixed-spread") cfg.fixed_spread = std::stoi(next());
         else if (arg == "--fill-model") cfg.fill_model = std::stoi(next());
+        else if (arg == "--fill-simulation") cfg.fill_simulation = true;
         else if (arg == "--help" || arg == "-h") cfg.show_help = true;
     }
     return cfg;
@@ -68,6 +70,7 @@ void print_help(const char* prog) {
               << "  --latency <US>           Fixed latency in us (default: 0)\n"
               << "  --fixed-spread <N>       Fixed spread (0=adaptive AS, >0=static spread)\n"
               << "  --fill-model <M>         0=SimplePoisson 1=QueuePosition (default: 0)\n"
+              << "  --fill-simulation        Use FillModel instead of matching engine for fills\n"
               << "  --output <file>          Output CSV path (default: results.csv)\n"
               << "  --snapshot-interval <N>  Snapshot every N ticks (default: 1)\n"
               << "  --help                   Show this help\n";
@@ -145,7 +148,7 @@ int main(int argc, char** argv) {
             cfg.vol_window, cfg.max_position
         );
         strategy->emplace_latency<mm::FixedLatency>(cfg.latency_us);
-        mm::Simulator sim(std::move(feed), std::move(strategy));
+        mm::Simulator sim(std::move(feed), std::move(strategy), cfg.fill_simulation);
         sim.set_snapshot_interval(cfg.snapshot_interval);
         std::cout << "Running fixed-spread simulation...\n";
         auto result = sim.run();
@@ -176,7 +179,7 @@ int main(int argc, char** argv) {
         strategy->emplace_latency<mm::FixedLatency>(cfg.latency_us);
     }
 
-    mm::Simulator sim(std::move(feed), std::move(strategy));
+    mm::Simulator sim(std::move(feed), std::move(strategy), cfg.fill_simulation);
     sim.set_snapshot_interval(cfg.snapshot_interval);
 
     std::cout << "Running simulation...\n";
